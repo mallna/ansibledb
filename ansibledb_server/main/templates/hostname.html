@@ -47,6 +47,84 @@
     <tr>
       <td colspan="2">
         <h2>{{host_facters}} Facters</h2>
+<div style="margin:10px 0;">
+  <button id="edit_vars_btn" onclick="openVarsModal();" class="btn">Edit custom vars</button>
+</div>
+
+<div id="varsModal" style="display:none; position: fixed; left:0; top:0; right:0; bottom:0; background: rgba(0,0,0,0.4); z-index:1000;">
+  <div style="background:white; margin:5% auto; padding:20px; width:80%; max-width:800px; border-radius:6px;">
+    <h3>Custom variables for <span id="varsModalHost"></span></h3>
+    <table id="vars_table" style="width:100%; border-collapse:collapse;">
+      <thead><tr><th style="text-align:left">Key</th><th style="text-align:left">Value</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <div style="margin-top:8px;">
+      <button onclick="addVarsRow();" class="btn">Add</button>
+      <button onclick="saveVars();" class="btn">Save</button>
+      <button onclick="closeVarsModal();" class="btn">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+function openVarsModal(){
+    var host = "{{ host_facters }}";
+    $('#varsModalHost').text(host);
+    $('#vars_table tbody').empty();
+    $.get('/api/hosts/' + encodeURIComponent(host) + '/vars', function(data){
+        if (data && typeof data === 'object'){
+            Object.keys(data).forEach(function(k){
+                addVarsRow(k, data[k]);
+            });
+        }
+        // show modal
+        $('#varsModal').show();
+    }).fail(function(){
+        alert('Failed to load vars (unauthorized?)');
+    });
+}
+
+function closeVarsModal(){
+    $('#varsModal').hide();
+}
+
+function addVarsRow(key, value){
+    key = key || '';
+    value = value || '';
+    var row = $('<tr/>');
+    var colKey = $('<td/>').append($('<input class="var-key" style="width:95%;">').val(key));
+    var colVal = $('<td/>').append($('<input class="var-value" style="width:95%;">').val(value));
+    var colAct = $('<td/>').append($('<button class="btn small">Delete</button>').click(function(){ row.remove(); }));
+    row.append(colKey).append(colVal).append(colAct);
+    $('#vars_table tbody').append(row);
+}
+
+function saveVars(){
+    var host = "{{ host_facters }}";
+    var payload = {};
+    $('#vars_table tbody tr').each(function(){
+        var k = $(this).find('.var-key').val();
+        var v = $(this).find('.var-value').val();
+        if (k && k.trim() !== ''){
+            payload[k.trim()] = v;
+        }
+    });
+    $.ajax({
+        url: '/api/hosts/' + encodeURIComponent(host) + '/vars',
+        method: 'POST',
+        data: JSON.stringify(payload),
+        contentType: 'application/json',
+        success: function(){
+            alert('Saved');
+            location.reload();
+        },
+        error: function(xhr){
+            alert('Save failed: ' + xhr.responseText);
+        }
+    });
+}
+</script>
+
       </td>
     </tr>
     <tr>

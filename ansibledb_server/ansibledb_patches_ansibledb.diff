@@ -1,0 +1,73 @@
+--- ansibledb_server/ansibledb.py
++++ ansibledb_server/ansibledb.py.patched
+@@ -479,6 +479,70 @@
+     result= {}
+     return result
+     
++
++
++@app.route('/api/hosts/<string:host>/vars', methods=['GET','POST','DELETE'])
++def host_vars(host):
++    """API endpoint to get/set/delete custom variables for a host.
++    GET returns a JSON object of vars.
++    POST expects a JSON object to replace the vars.
++    DELETE removes all custom vars for the host.
++    Access is allowed if user is logged in (session) or a valid token is provided in header 'token'.
++    """
++    # allow session user or token auth
++    if not ('user' in session or ansibledb.auth_token()):
++        return jsonify({"message": "unauthorized"}), 401
++
++    if request.method == 'GET':
++        vars = ansibledb.get_host_vars(host)
++        return jsonify(vars)
++    elif request.method == 'POST':
++        try:
++            payload = request.get_json(force=True)
++        except Exception:
++            return jsonify({"message": "invalid json"}), 400
++        if not isinstance(payload, dict):
++            return jsonify({"message": "payload must be a JSON object"}), 400
++        ok = ansibledb.set_host_vars(host, payload)
++        if ok:
++            return jsonify({"message": "ok"})
++        else:
++            return jsonify({"message": "failed"}), 500
++    elif request.method == 'DELETE':
++        ok = ansibledb.set_host_vars(host, {})
++        if ok:
++            return jsonify({"message": "deleted"})
++        else:
++            return jsonify({"message": "failed"}), 500
++
++
++@app.route('/api/inventory', methods=['GET'])
++def api_inventory():
++    """Return a dynamic inventory JSON compatible with Ansible.
++    By default custom variables stored under 'ansibledb_vars' are exposed as host variables
++    prefixed with 'ansibledb_vars_' (configurable with ?prefix=).
++    This endpoint requires a valid token in the 'token' header.
++    """
++    prefix = request.args.get('prefix', 'ansibledb_vars_')
++    if not ansibledb.auth_token():
++        return jsonify({"message": "unauthorized"}), 401
++
++    cursor = servers.find({"ansible_facts.hostname": {"$regex": '^.*'}}, {"ansible_facts.hostname": 1, "ansibledb_vars": 1, "_id": 0})
++    hosts = []
++    hostvars = {}
++    for doc in cursor:
++        host = doc.get('ansible_facts', {}).get('hostname')
++        if not host:
++            continue
++        hosts.append(host)
++        vars = doc.get('ansibledb_vars', {}) or {}
++        # apply prefix to each custom var key so they can be referenced in playbooks
++        hostvars[host] = {f"{prefix}{k}": v for k, v in vars.items()}
++
++    inv = {"all": {"hosts": hosts}, "_meta": {"hostvars": hostvars}}
++    return jsonify(inv)
++
++
+ @app.errorhandler(404)
+ def page_not_found(error):
+     """ Handle 404 error"""

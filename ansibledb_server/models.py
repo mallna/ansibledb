@@ -312,6 +312,38 @@ class AnsibleDB():
         result = list(cursor)
         #result = json.dumps(list_result,default=str)
         return result
+
+    @staticmethod
+    def get_host_vars(host):
+        """Return the custom variables stored under 'ansibledb_vars' for a host."""
+        try:
+            doc = servers.find_one({"ansible_facts.hostname": host}, {"ansibledb_vars": 1, "_id": 0})
+            if doc and "ansibledb_vars" in doc:
+                return doc.get("ansibledb_vars", {})
+            else:
+                return {}
+        except Exception as e:
+            try:
+                app.logger.exception("get_host_vars failed: %s", e)
+            except:
+                pass
+            return {}
+
+    @staticmethod
+    def set_host_vars(host, vars_dict):
+        """Set or replace the custom variables for a host. vars_dict must be a mapping."""
+        try:
+            if not isinstance(vars_dict, dict):
+                raise ValueError("vars must be a dict")
+            servers.update_one({"ansible_facts.hostname": host}, {"$set": {"ansibledb_vars": vars_dict}}, True)
+            return True
+        except Exception as e:
+            try:
+                app.logger.exception("set_host_vars failed: %s", e)
+            except:
+                pass
+            return False
+
     @staticmethod
     def delete_report(report_time):
         try:
